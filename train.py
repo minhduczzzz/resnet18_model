@@ -6,20 +6,20 @@ from model import ResNet18
 from dataset import get_dataloader
 
 csv_file = "labels.csv"
-img_dir = "data/train"
-
+img_train = "data/train"
+img_test = "data/test"
 batch_size = 32
 
 trainloader, train_dataset = get_dataloader(
     csv_file=csv_file,
-    img_dir=img_dir,
+    img_dir=img_train,
     batch_size=batch_size,
     train=True
 )
 
 testloader, test_dataset = get_dataloader(
     csv_file=csv_file,
-    img_dir=img_dir,
+    img_dir=img_test,
     batch_size=batch_size,
     train=False
 )
