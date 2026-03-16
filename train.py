@@ -3,37 +3,29 @@ import torch.nn as nn
 import torch.optim as optim
 
 from model import ResNet18
-from dataset import get_dataloader
+from dataset import get_dataloaders
 
 csv_file = "labels.csv"
-img_train = "data/train"
-img_test = "data/test"
+img_dir = "data/train"
 batch_size = 32
 
-trainloader, train_dataset = get_dataloader(
-    csv_file=csv_file,
-    img_dir=img_train,
-    batch_size=batch_size,
-    train=True
+train_loader, val_loader, dataset = get_dataloaders(
+    csv_file,
+    img_dir,
+    batch_size
 )
 
-testloader, test_dataset = get_dataloader(
-    csv_file=csv_file,
-    img_dir=img_test,
-    batch_size=batch_size,
-    train=False
-)
 
-num_classes = len(train_dataset.breeds)
+
+num_classes = len(dataset.breeds)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = ResNet18(num_classes).to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
-scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+optimizer = optim.Adam(model.parameters(), lr=0.001)
 
-num_epochs = 10
+num_epochs = 30
 train_losses, train_acc_list, test_acc_list = [], [], []
 
 for epoch in range(num_epochs):
