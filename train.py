@@ -1,66 +1,117 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
+import numpy as np
 
-from model import ResNet18
 from dataset import get_dataloaders
+from model import ResNet34
+
 
 csv_file = "labels.csv"
 img_dir = "data/train"
-batch_size = 32
 
-train_loader, val_loader, dataset = get_dataloaders(
+epochs = 100
+batch_size = 64
+
+train_loader,val_loader,dataset = get_dataloaders(
     csv_file,
     img_dir,
     batch_size
 )
 
-
-
 num_classes = len(dataset.breeds)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-model = ResNet18(num_classes).to(device)
 
-criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+model = ResNet34(num_classes).to(device)
 
-num_epochs = 30
-train_losses, train_acc_list, test_acc_list = [], [], []
+criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-for epoch in range(num_epochs):
+optimizer = optim.AdamW(
+    model.parameters(),
+    lr=0.001,
+    weight_decay=1e-4
+)
+
+scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+    optimizer,
+    T_max=epochs
+)
+
+
+def mixup_data(x,y,alpha=0.4):
+
+    lam = np.random.beta(alpha,alpha)
+
+    batch_size = x.size()[0]
+
+    index = torch.randperm(batch_size).to(device)
+
+    mixed_x = lam*x + (1-lam)*x[index]
+
+    y_a,y_b = y,y[index]
+
+    return mixed_x,y_a,y_b,lam
+
+
+for epoch in range(epochs):
+
     model.train()
-    running_loss = 0.0
-    correct, total = 0, 0
-    for inputs, labels in trainloader:
-        inputs, labels = inputs.to(device), labels.to(device)
+
+    correct = 0
+    total = 0
+
+    for images,labels in train_loader:
+
+        images = images.to(device)
+        labels = labels.to(device)
+
+        images,y_a,y_b,lam = mixup_data(images,labels)
+
         optimizer.zero_grad()
-        outputs = model(inputs)
-        loss = criterion(outputs, labels)
+
+        outputs = model(images)
+
+        loss = lam*criterion(outputs,y_a) + (1-lam)*criterion(outputs,y_b)
+
         loss.backward()
+
         optimizer.step()
-        
-        running_loss += loss.item() * inputs.size(0)
-        _, predicted = outputs.max(1)
+
+        _,pred = outputs.max(1)
+
         total += labels.size(0)
-        correct += predicted.eq(labels).sum().item()
-    
-    train_loss = running_loss / len(trainloader.dataset)
-    train_acc = 100. * correct / total
-    train_losses.append(train_loss)
-    train_acc_list.append(train_acc)
+        correct += pred.eq(labels).sum().item()
+
+    train_acc = 100*correct/total
 
     model.eval()
-    correct, total = 0, 0
+
+    correct = 0
+    total = 0
+
     with torch.no_grad():
-        for inputs, labels in testloader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            _, predicted = outputs.max(1)
+
+        for images,labels in val_loader:
+
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+
+            _,pred = outputs.max(1)
+
             total += labels.size(0)
-            correct += predicted.eq(labels).sum().item()
-    test_acc = 100. * correct / total
-    test_acc_list.append(test_acc)
-    
+            correct += pred.eq(labels).sum().item()
+
+    val_acc = 100*correct/total
+
     scheduler.step()
-    print(f'Epoch [{epoch+1}/{num_epochs}] Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}% | Test Acc: {test_acc:.2f}%')
+
+    print(
+        f"Epoch {epoch+1}/{epochs} "
+        f"Train Acc {train_acc:.2f}% "
+        f"Val Acc {val_acc:.2f}%"
+    )
+
+torch.save(model.state_dict(),"dog_resnet34.pth")
