@@ -46,7 +46,10 @@ class ResNet18(nn.Module):
         self.layer4 = self._make_layer(512, 2, stride=2)
 
         self.avgpool = nn.AdaptiveAvgPool2d((1,1))
-        self.fc = nn.Linear(512, num_classes)
+        self.fc = nn.Sequential(
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes)
+        )
 
     def _make_layer(self, out_channels, num_blocks, stride):
         strides = [stride] + [1]*(num_blocks-1)
