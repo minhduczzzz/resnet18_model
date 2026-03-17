@@ -12,7 +12,7 @@ from dataset import get_dataloaders   # 🔥 IMPORT Ở ĐÂY
 csv_file = "labels.csv"
 img_dir = "train"
 batch_size = 32
-num_epochs = 20
+num_epochs = 30
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
