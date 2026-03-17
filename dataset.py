@@ -6,35 +6,34 @@ import torch
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
+from sklearn.model_selection import train_test_split
 
+
+# ======================
+# DATASET CLASS
+# ======================
 class DogDataset(Dataset):
-    def __init__(self, csv_file, img_dir, transform=None):
+    def __init__(self, df, img_dir, breed_to_idx, transform=None):
         """
-        csv_file : path to labels.csv
-        img_dir  : folder chứa ảnh train
-        transform: image transform
+        df            : pandas DataFrame (đã chứa id, breed)
+        img_dir       : folder chứa ảnh
+        breed_to_idx  : mapping breed -> label
+        transform     : transform ảnh
         """
-        self.df = pd.read_csv(csv_file)
+        self.df = df.reset_index(drop=True)
         self.img_dir = img_dir
         self.transform = transform
-
-        # tạo danh sách breed
-        self.breeds = sorted(self.df['breed'].unique())
-
-        # map breed -> index
-        self.breed_to_idx = {breed: idx for idx, breed in enumerate(self.breeds)}
-        self.idx_to_breed = {idx: breed for breed, idx in self.breed_to_idx.items()}
-
-        # thêm column label dạng số
-        self.df['label'] = self.df['breed'].map(self.breed_to_idx)
+        self.breed_to_idx = breed_to_idx
 
     def __len__(self):
         return len(self.df)
 
     def __getitem__(self, idx):
+        row = self.df.iloc[idx]
 
-        img_id = self.df.iloc[idx]['id']
-        label = self.df.iloc[idx]['label']
+        img_id = row['id']
+        breed = row['breed']
+        label = self.breed_to_idx[breed]
 
         img_path = os.path.join(self.img_dir, img_id + ".jpg")
 
@@ -46,45 +45,91 @@ class DogDataset(Dataset):
         return image, label
 
 
+# ======================
+# TRANSFORMS
+# ======================
 def get_transforms(train=True):
-
     if train:
-        transform = transforms.Compose([
-            transforms.Resize((256,256)),
+        return transforms.Compose([
+            transforms.Resize((256, 256)),
             transforms.RandomCrop(224),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.485,0.456,0.406],
-                std=[0.229,0.224,0.225]
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
             )
         ])
     else:
-        transform = transforms.Compose([
-            transforms.Resize((224,224)),
+        return transforms.Compose([
+            transforms.Resize((224, 224)),
             transforms.ToTensor(),
             transforms.Normalize(
-                mean=[0.485,0.456,0.406],
-                std=[0.229,0.224,0.225]
+                mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]
             )
         ])
 
-    return transform
 
+# ======================
+# CREATE DATALOADER
+# ======================
+def get_dataloaders(csv_file, img_dir, batch_size=32, val_ratio=0.2):
 
-def get_dataloader(csv_file, img_dir, batch_size=32, train=True):
+    df = pd.read_csv(csv_file)
 
-    dataset = DogDataset(
-        csv_file=csv_file,
-        img_dir=img_dir,
-        transform=get_transforms(train)
+    # ===== LABEL MAPPING (CHUNG) =====
+    breeds = sorted(df['breed'].unique())
+    breed_to_idx = {breed: idx for idx, breed in enumerate(breeds)}
+    idx_to_breed = {idx: breed for breed, idx in breed_to_idx.items()}
+
+    # ===== SPLIT TRAIN / VAL =====
+    train_df, val_df = train_test_split(
+        df,
+        test_size=val_ratio,
+        stratify=df['breed'],  # giữ cân bằng class
+        random_state=42
     )
 
-    loader = DataLoader(
-        dataset,
+    # ===== DATASET =====
+    train_dataset = DogDataset(
+        train_df,
+        img_dir,
+        breed_to_idx,
+        transform=get_transforms(train=True)
+    )
+
+    val_dataset = DogDataset(
+        val_df,
+        img_dir,
+        breed_to_idx,
+        transform=get_transforms(train=False)
+    )
+
+    # ===== DATALOADER =====
+    train_loader = DataLoader(
+        train_dataset,
         batch_size=batch_size,
-        shuffle=train,
-        num_workers=2
+        shuffle=True,
+        num_workers=2,
+        pin_memory=True
     )
 
-    return loader, dataset
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True
+    )
+
+    return train_loader, val_loader, breed_to_idx, idx_to_breed
+
+
+# ======================
+# DEBUG FUNCTION (OPTIONAL)
+# ======================
+def debug_dataset(loader):
+    images, labels = next(iter(loader))
+    print("Batch shape:", images.shape)
+    print("Labels:", labels[:10])
