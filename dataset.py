@@ -1,21 +1,31 @@
 import os
 import pandas as pd
 from PIL import Image
-from torch.utils.data import Dataset
+
+import torch
+from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
 
 class DogDataset(Dataset):
-
     def __init__(self, csv_file, img_dir, transform=None):
+        """
+        csv_file : path to labels.csv
+        img_dir  : folder chứa ảnh train
+        transform: image transform
+        """
         self.df = pd.read_csv(csv_file)
         self.img_dir = img_dir
         self.transform = transform
 
-        # tạo label index
+        # tạo danh sách breed
         self.breeds = sorted(self.df['breed'].unique())
-        self.breed_to_idx = {breed: i for i, breed in enumerate(self.breeds)}
 
+        # map breed -> index
+        self.breed_to_idx = {breed: idx for idx, breed in enumerate(self.breeds)}
+        self.idx_to_breed = {idx: breed for breed, idx in self.breed_to_idx.items()}
+
+        # thêm column label dạng số
         self.df['label'] = self.df['breed'].map(self.breed_to_idx)
 
     def __len__(self):
@@ -40,30 +50,41 @@ def get_transforms(train=True):
 
     if train:
         transform = transforms.Compose([
-            transforms.RandomResizedCrop(224),
+            transforms.Resize((256,256)),
+            transforms.RandomCrop(224),
             transforms.RandomHorizontalFlip(),
-            transforms.RandomRotation(15),
-            transforms.ColorJitter(
-                brightness=0.2,
-                contrast=0.2,
-                saturation=0.2
-            ),
             transforms.ToTensor(),
             transforms.Normalize(
-                [0.485,0.456,0.406],
-                [0.229,0.224,0.225]
+                mean=[0.485,0.456,0.406],
+                std=[0.229,0.224,0.225]
             )
         ])
-
     else:
         transform = transforms.Compose([
-            transforms.Resize(256),
-            transforms.CenterCrop(224),
+            transforms.Resize((224,224)),
             transforms.ToTensor(),
             transforms.Normalize(
-                [0.485,0.456,0.406],
-                [0.229,0.224,0.225]
+                mean=[0.485,0.456,0.406],
+                std=[0.229,0.224,0.225]
             )
         ])
 
     return transform
+
+
+def get_dataloader(csv_file, img_dir, batch_size=32, train=True):
+
+    dataset = DogDataset(
+        csv_file=csv_file,
+        img_dir=img_dir,
+        transform=get_transforms(train)
+    )
+
+    loader = DataLoader(
+        dataset,
+        batch_size=batch_size,
+        shuffle=train,
+        num_workers=2
+    )
+
+    return loader, dataset
