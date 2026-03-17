@@ -34,7 +34,12 @@ model = ResNet18(num_classes=len(breed_to_idx)).to(device)
 
 criterion = nn.CrossEntropyLoss()
 
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+optimizer = optim.SGD(
+    model.parameters(),
+    lr=0.01,
+    momentum=0.9,
+    weight_decay=5e-4
+)
 
 scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
 
