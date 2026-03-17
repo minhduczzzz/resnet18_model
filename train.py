@@ -10,7 +10,7 @@ from dataset import get_dataloaders   # 🔥 IMPORT Ở ĐÂY
 # CONFIG
 # ======================
 csv_file = "labels.csv"
-img_dir = "train"
+img_dir = "data/train"
 batch_size = 32
 num_epochs = 30
 
